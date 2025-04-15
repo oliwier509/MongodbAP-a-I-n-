@@ -3,16 +3,34 @@ import { config } from './config';
 import Controller from "./interfaces/controller.interface";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
+import http from "http";
+import { Server, Socket } from "socket.io";
+import cors from "cors";
+import DataService from './modules/services/data.service';
+
 
 
 class App {
     public app: express.Application;
+    private server: http.Server;
+    public io: Server;
+    private dataService = new DataService();
 
     constructor(controllers: Controller[]) {
         this.app = express();
+        this.server = http.createServer(this.app);
 
+        this.io = new Server(this.server, {
+            cors: {
+                origin: "http://localhost:5173",
+                methods: ["GET", "POST"],
+                allowedHeaders: ["Authorization"],
+                credentials: true
+            },
+        });
 
         this.initializeMiddlewares();
+        this.initializeSocket();
         this.initializeControllers(controllers);
         this.connectToDatabase();
     }
@@ -69,5 +87,55 @@ class App {
         });
     }
 
+    private initializeSocket(): void {
+    
+
+        this.io.on("connection", async (socket: Socket) => {
+            console.log(`Nowe połączenie: ${socket.id}`);
+
+            const data = await this.dataService.getAll();
+            socket.emit("message", data);
+
+            setInterval(async () => {
+                
+                const data = await this.dataService.getAll();
+                this.io.emit("message", data);
+            }, 5000); //po jakimś czasie ignoruje to i robi 2 zapytania :over:
+
+            //przykładowe dane:
+            //{"temperature":500.9,"pressure":900.9,"humidity":4554.6,"deviceId":14}
+            //wkleić do inputa w front-endzie
+            socket.on("message", async (data: string) => {
+                console.log(`Wiadomość od ${socket.id}: ${data}`);
+                
+                try {
+                    const parsedData = JSON.parse(data);
+                    const saved = await this.dataService.post(parsedData);
+                    console.log("Zapisano w bazie danych:", saved);
+                    this.io.emit("message", saved);
+            
+                } catch (err) {
+                    console.error("Błąd zapisu danych:", err);
+                    socket.emit("error", "Nieprawidłowe dane lub błąd zapisu.");
+                }
+
+            });
+
+
+            socket.on("disconnect", () => {
+                console.log(`Rozłączono: ${socket.id}`);
+            });
+        });
+
+
+        this.server.listen(config.socketPort, () => {
+            console.log(`WebSocket listening on port ${config.socketPort}`);
+        });
+    }
+
+
+    public getIo(): Server {
+        return this.io;
+    }
 }
 export default App;

@@ -30,7 +30,7 @@ class DataController implements Controller {
         try {
             const output = await this.dataService.post(request.body);
             response.status(201).send(output);
-        } catch (error) {
+        } catch (error: any) {
             response.status(500).send(error.message);
         }
     };
@@ -39,7 +39,7 @@ class DataController implements Controller {
         try {
             const output = await this.dataService.delete(request.params.id);
             response.sendStatus(output);
-        } catch (error) {
+        } catch (error: any) {
             response.status(500).send(error.message);
         }
     }
