@@ -8,13 +8,14 @@ import { Server, Socket } from "socket.io";
 import cors from "cors";
 import DataService from './modules/services/data.service';
 
-
+const nicknames = new Map<string, string>();
 
 class App {
     public app: express.Application;
     private server: http.Server;
     public io: Server;
     private dataService = new DataService();
+    
 
     constructor(controllers: Controller[]) {
         this.app = express();
@@ -121,10 +122,27 @@ class App {
 
             });
 
+            
+            socket.on("set-nickname", (nick: string) => {
+                nicknames.set(socket.id, nick);
+                console.log(`Użytkownik ${socket.id} ustawił nick: ${nick}`);
+                updateUserList();
+            });
+
+            socket.on("private-message", ({ toSocketId, from, content }) => {
+                socket.to(toSocketId).emit("private-message", { from, content });
+            });
 
             socket.on("disconnect", () => {
                 console.log(`Rozłączono: ${socket.id}`);
+                nicknames.delete(socket.id);
+                updateUserList();
             });
+
+            const updateUserList = () => {
+                const users = Array.from(nicknames.entries()).map(([id, nick]) => ({ socketId: id, nick }));
+                this.io.emit("user-list", users);
+            };
         });
 
 
